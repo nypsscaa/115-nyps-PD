@@ -82,8 +82,7 @@
             <button onclick="cancelStampMode()" class="text-slate-400 hover:text-slate-600 text-sm font-bold">×</button>
           </div>
 
-          <div class="grid grid-cols-3 gap-2.5" id="teacher-pool">
-            </div>
+          <div class="grid grid-cols-3 gap-2.5" id="teacher-pool"></div>
         </div>
 
         <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
@@ -156,8 +155,7 @@
           <div class="py-2 bg-slate-50 rounded-lg print-border">五</div>
         </div>
 
-        <div class="grid grid-cols-5 gap-2 md:gap-4 calendar-grid" id="calendar-grid">
-          </div>
+        <div class="grid grid-cols-5 gap-2 md:gap-4 calendar-grid" id="calendar-grid"></div>
       </main>
     </div>
 
@@ -225,17 +223,17 @@
     const db = firebase.database();
     const dbRef = db.ref('prep_day_115_08_system');
 
-    // 系統預設狀態
+    // 關鍵修復：Firebase key 禁止使用 '/'，內部統一改用 '-'
     let state = {
       selectedTeacher: null,
       targetDateForModal: null,
       customTeachers: ['', '', ''],
       calendar: {
-        "8/3": [], "8/4": [], "8/5": [], "8/6": [], "8/7": [],
-        "8/10": [], "8/11": [], "8/12": [], "8/13": [], "8/14": [],
-        "8/17": [], "8/18": [], "8/19": [], "8/20": [], "8/21": [],
-        "8/24": [], "8/25": [], "8/26": [], "8/27": [], "8/28": null,
-        "8/31": null
+        "8-3": [], "8-4": [], "8-5": [], "8-6": [], "8-7": [],
+        "8-10": [], "8-11": [], "8-12": [], "8-13": [], "8-14": [],
+        "8-17": [], "8-18": [], "8-19": [], "8-20": [], "8-21": [],
+        "8-24": [], "8-25": [], "8-26": [], "8-27": [], "8-28": null,
+        "8-31": null
       }
     };
 
@@ -244,27 +242,14 @@
       document.getElementById('print-date').textContent = `${today.getFullYear() - 1911}/${today.getMonth() + 1}/${today.getDate()}`;
       renderAll(); 
       lucide.createIcons();
-
-      // 連線異常偵測 (5秒後若還是黃色，則提醒使用者)
-      setTimeout(() => {
-        const syncStatus = document.getElementById('sync-status');
-        if(syncStatus.innerHTML.includes('連線中')) {
-           syncStatus.innerHTML = '⚠️ 連線逾時或遭阻擋';
-           syncStatus.className = 'text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full font-bold';
-           document.getElementById('cloud-pulse').classList.replace('bg-emerald-500', 'bg-amber-500');
-           showToast("無法連接至資料庫。請確認 Firebase 是否已正確建立資料庫，或嘗試切換為手機網路（避開學術網路限制）。", "warning");
-        }
-      }, 5000);
     };
 
-    // Firebase 實時監聽
     dbRef.on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
         if (data.calendar) state.calendar = data.calendar;
         if (data.customTeachers) state.customTeachers = data.customTeachers;
       } else {
-        // 資料庫完全沒東西時，丟預設空框架上去
         dbRef.set({ calendar: state.calendar, customTeachers: state.customTeachers });
       }
       
@@ -277,34 +262,26 @@
       renderAll();
     }, (error) => {
       console.error("Firebase 連線錯誤：", error);
-      const syncStatus = document.getElementById('sync-status');
-      syncStatus.innerHTML = '🔴 資料庫權限未開';
-      syncStatus.className = 'text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full font-bold';
-      document.getElementById('cloud-pulse').classList.replace('bg-emerald-500', 'bg-rose-500');
-      showToast("雲端資料庫讀取失敗！請至 Firebase 後台開啟 Realtime Database 的讀寫權限。", "error");
     });
 
-    // 🌟 關鍵修復：樂觀渲染 (先更新畫面，再把資料送上雲端)
     function saveToCloud() {
-      renderAll(); // 立即將更新反映在畫面上，解決明明排了卻看不到的問題
+      renderAll(); 
 
       dbRef.set({
         calendar: state.calendar,
         customTeachers: state.customTeachers
       }).catch(err => {
         console.error("存檔失敗：", err);
-        showToast("資料寫入雲端失敗，請確認網路連線。", "error");
-        document.getElementById('sync-status').innerHTML = '🔴 離線 / 寫入失敗';
-        document.getElementById('sync-status').className = 'text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full font-bold';
       });
     }
 
+    // WEEKS_DATA 也改用 '-'
     const WEEKS_DATA = [
-      ["8/3", "8/4", "8/5", "8/6", "8/7"],
-      ["8/10", "8/11", "8/12", "8/13", "8/14"],
-      ["8/17", "8/18", "8/19", "8/20", "8/21"],
-      ["8/24", "8/25", "8/26", "8/27", "8/28"],
-      ["8/31", "", "", "", ""]
+      ["8-3", "8-4", "8-5", "8-6", "8-7"],
+      ["8-10", "8-11", "8-12", "8-13", "8-14"],
+      ["8-17", "8-18", "8-19", "8-20", "8-21"],
+      ["8-24", "8-25", "8-26", "8-27", "8-28"],
+      ["8-31", "", "", "", ""]
     ];
 
     function getTeacherStyle(name) {
@@ -402,16 +379,17 @@
             return;
           }
 
-          const isBlocked = (dayKey === "8/28" || dayKey === "8/31");
+          const isBlocked = (dayKey === "8-28" || dayKey === "8-31");
           const list = (state.calendar && state.calendar[dayKey]) ? state.calendar[dayKey] : [];
+          const displayDate = dayKey.replace('-', '/'); // 轉回 8/3 顯示給使用者看
           let dayCardHTML = '';
 
           if (isBlocked) {
-            const reason = dayKey === "8/28" ? "返校日" : "開學日";
+            const reason = dayKey === "8-28" ? "返校日" : "開學日";
             dayCardHTML = `
               <div class="bg-striped rounded-2xl border border-slate-200 p-3 min-h-[140px] flex flex-col justify-between select-none print-border">
                 <div class="flex justify-between items-center mb-2">
-                  <span class="text-xs font-bold text-slate-500">${dayKey}</span>
+                  <span class="text-xs font-bold text-slate-500">${displayDate}</span>
                   <span class="text-[10px] bg-rose-100 text-rose-700 font-bold px-1.5 py-0.5 rounded-full">${reason}</span>
                 </div>
                 <div class="flex-1 flex flex-col items-center justify-center py-4 text-slate-400">
@@ -426,7 +404,7 @@
             dayCardHTML = `
               <div class="bg-white rounded-2xl border border-slate-200 hover:border-emerald-300 hover:shadow-md p-3 min-h-[140px] flex flex-col justify-between transition-all duration-200 print-border" ondragover="allowDrop(event)" ondrop="onDrop(event, '${dayKey}')">
                 <div class="flex justify-between items-start mb-2">
-                  <span class="text-xs md:text-sm font-black text-slate-700">${dayKey}</span>
+                  <span class="text-xs md:text-sm font-black text-slate-700">${displayDate}</span>
                   <span class="text-[10px] font-bold border px-2 py-0.5 rounded-full ${badgeClass} print:hidden">${badgeText}</span>
                   <span class="text-[9px] font-bold text-slate-400 hidden print:block">${list.length}人填報</span>
                 </div>
@@ -578,7 +556,7 @@
     function assignTeacherToDate(name, dayKey) {
       const list = state.calendar[dayKey] || [];
       if (list.length >= 2) {
-        showToast(`8/${dayKey.split('/')[1]} 備課日登記已滿 (每日上限2人)！`, 'warning');
+        showToast(`8/${dayKey.split('-')[1]} 備課日登記已滿 (每日上限2人)！`, 'warning');
         return false;
       }
       if (getTeacherAssignmentCount(name) >= 1) {
@@ -587,7 +565,7 @@
       }
       state.calendar[dayKey].push(name);
       saveToCloud(); 
-      showToast("成功填入【" + name + "】於 8/" + dayKey.split('/')[1] + " 備課日", "success");
+      showToast("成功填入【" + name + "】於 8/" + dayKey.split('-')[1] + " 備課日", "success");
       return true;
     }
 
@@ -595,7 +573,7 @@
       const removedName = state.calendar[dayKey][index];
       state.calendar[dayKey].splice(index, 1);
       saveToCloud(); 
-      showToast("已移除【" + removedName + "】在 8/" + dayKey.split('/')[1] + " 的登記", "info");
+      showToast("已移除【" + removedName + "】在 8/" + dayKey.split('-')[1] + " 的登記", "info");
     }
 
     function onDragStart(event, name) {
@@ -635,7 +613,7 @@
       state.targetDateForModal = dayKey;
       const modal = document.getElementById('teacher-select-modal');
       const inner = modal.querySelector('div');
-      document.getElementById('modal-date-info').textContent = `指派教師至：8 月 ${dayKey.split('/')[1]} 日備課日 (每日上限 2 人)`;
+      document.getElementById('modal-date-info').textContent = `指派教師至：8 月 ${dayKey.split('-')[1]} 日備課日 (每日上限 2 人)`;
       
       const listContainer = document.getElementById('modal-teachers-list');
       listContainer.innerHTML = '';
@@ -673,7 +651,7 @@
     }
 
     function runAutoSchedule() {
-      const activeDays = ["8/3", "8/4", "8/5", "8/6", "8/7", "8/10", "8/11", "8/12", "8/13", "8/14", "8/17", "8/18", "8/19", "8/20", "8/21", "8/24", "8/25", "8/26", "8/27"];
+      const activeDays = ["8-3", "8-4", "8-5", "8-6", "8-7", "8-10", "8-11", "8-12", "8-13", "8-14", "8-17", "8-18", "8-19", "8-20", "8-21", "8-24", "8-25", "8-26", "8-27"];
       const activeTeachers = getActiveTeachers();
 
       if (activeTeachers.length === 0) {
@@ -690,7 +668,7 @@
         testCalendar[shuffledDays[i]].push(shuffledTeachers[i]);
       }
 
-      state.calendar = { ...testCalendar, "8/28": null, "8/31": null };
+      state.calendar = { ...testCalendar, "8-28": null, "8-31": null };
       saveToCloud(); 
       showToast(`💡 智慧自動排班完成！已將當前 ${activeTeachers.length} 位登記教師完美隨機分流！`, "success");
     }
@@ -700,10 +678,10 @@
 
     function clearAllData() {
       state.calendar = {
-        "8/3": [], "8/4": [], "8/5": [], "8/6": [], "8/7": [],
-        "8/10": [], "8/11": [], "8/12": [], "8/13": [], "8/14": [],
-        "8/17": [], "8/18": [], "8/19": [], "8/20": [], "8/21": [],
-        "8/24": [], "8/25": [], "8/26": [], "8/27": [], "8/28": null, "8/31": null
+        "8-3": [], "8-4": [], "8-5": [], "8-6": [], "8-7": [],
+        "8-10": [], "8-11": [], "8-12": [], "8-13": [], "8-14": [],
+        "8-17": [], "8-18": [], "8-19": [], "8-20": [], "8-21": [],
+        "8-24": [], "8-25": [], "8-26": [], "8-27": [], "8-28": null, "8-31": null
       };
       state.customTeachers = ['', '', ''];
       saveToCloud();
@@ -716,13 +694,13 @@
       WEEKS_DATA.forEach(week => {
         csvContent += week.map(day => {
           if (!day) return "";
-          if (day === "8/28") return '"8/28\n(返校日)"';
-          if (day === "8/31") return '"8/31\n(開學)"';
-          return day;
+          if (day === "8-28") return '"8/28\n(返校日)"';
+          if (day === "8-31") return '"8/31\n(開學)"';
+          return day.replace('-', '/');
         }).join(",") + "\n";
 
-        csvContent += week.map(day => (!day || day === "8/28" || day === "8/31") ? "" : (state.calendar[day] || [])[0] || "").join(",") + "\n";
-        csvContent += week.map(day => (!day || day === "8/28" || day === "8/31") ? "" : (state.calendar[day] || [])[1] || "").join(",") + "\n";
+        csvContent += week.map(day => (!day || day === "8-28" || day === "8-31") ? "" : (state.calendar[day] || [])[0] || "").join(",") + "\n";
+        csvContent += week.map(day => (!day || day === "8-28" || day === "8-31") ? "" : (state.calendar[day] || [])[1] || "").join(",") + "\n";
       });
 
       const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
