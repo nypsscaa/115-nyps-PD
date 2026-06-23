@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>鳥嶼國小115學年度8月份備課日填報系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght=300;400;500;700;900&display=swap');
+    body { font-family: 'Noto Sans TC', sans-serif; }
+    /* 條紋鎖定背景 */
+    .bg-striped { background-image: repeating-linear-gradient(45deg, #f1f5f9, #f1f5f9 10px, #e2e8f0 10px, #e2e8f0 20px); }
+    /* 列印專用樣式 */
+    @media print {
+      body { background: white !important; color: black !important; }
+      .no-print { display: none !important; }
+      .print-full { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; box-shadow: none !important; }
+      .calendar-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; gap: 6px !important; }
+      .print-border { border: 1px solid #cbd5e1 !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+
+  <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+  <div class="max-w-7xl mx-auto px-4 py-6 md:py-10 print-full">
+    
+    <header class="mb-8 border-b border-slate-200 pb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 print-full">
+      <div class="flex items-center gap-3">
+        <div class="p-3 bg-emerald-600 text-white rounded-2xl shadow-md no-print">
+          <i data-lucide="calendar-check" class="w-8 h-8"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">鳥嶼國小115學年度8月份備課日填報系統</h1>
+          <p class="text-sm text-slate-500 mt-1 no-print">國小教師備課日程登記表 • 每位教師僅需填報 1 天</p>
+          <p class="text-sm font-semibold text-slate-700 mt-1 hidden print:block">鳥嶼國小115學年度8月份備課日填報系統 (列印版)</p>
+        </div>
+      </div>
+      
+      <div class="hidden print:flex items-center gap-4 text-xs text-slate-500">
+        <div>製表日期：<span id="print-date"></span></div>
+        <div>填報進度：<span id="print-progress">0%</span></div>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      
+      <aside class="lg:col-span-4 space-y-6 no-print">
+        
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+          <h3 class="font-bold text-slate-800 flex items-center gap-2 mb-3">
+            <i data-lucide="info" class="w-5 h-5 text-emerald-600"></i>
+            系統填報規則
+          </h3>
+          <ul class="text-sm text-slate-600 space-y-2 list-disc list-inside">
+            <li><span class="font-semibold text-slate-800">8/28 (返校日)</span> 與 <span class="font-semibold text-slate-800">8/31 (開學日)</span> 不可填報。</li>
+            <li>其餘平日每天<span class="text-rose-600 font-semibold">最多 2 人</span>登記。</li>
+            <li>每位教師<span class="text-emerald-600 font-semibold">僅需且限制填報 1 天</span>.</li>
+            <li>支援自訂教師：底端設有三個自訂框，直接輸入名字即可。</li>
+            <li>本系統支援：
+              <div class="pl-4 mt-1 space-y-1 text-xs text-slate-500">
+                • <strong class="text-slate-700">電腦拖曳</strong>：拖曳左側姓名丟進日期。<br>
+                • <strong class="text-slate-700">點擊蓋章</strong>：按左側教師名字，再點日期空位。<br>
+                • <strong class="text-slate-700">直接點選</strong>：直接點擊空位從選單挑人。
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-extrabold text-lg text-slate-800 flex items-center gap-2">
+              <i data-lucide="users" class="w-5 h-5 text-emerald-600"></i>
+              教師名單
+            </h2>
+            <span class="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-full font-medium" id="sync-status">🟢 已連線</span>
+          </div>
+
+          <div id="stamp-indicator" class="hidden mb-4 p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs flex items-center justify-between animate-pulse">
+            <div class="flex items-center gap-1.5">
+              <i data-lucide="pencil-ruler" class="w-4 h-4"></i>
+              <span>蓋章模式：請點擊行事曆空位填入 <strong id="stamp-teacher-name"></strong></span>
+            </div>
+            <button onclick="cancelStampMode()" class="text-slate-400 hover:text-slate-600 text-sm font-bold">×</button>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2.5" id="teacher-pool">
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+          <h2 class="font-extrabold text-lg text-slate-800 flex items-center gap-2 mb-4">
+            <i data-lucide="bar-chart-3" class="w-5 h-5 text-emerald-600"></i>
+            填報進度與分析
+          </h2>
+          
+          <div class="space-y-4">
+            <div>
+              <div class="flex justify-between text-sm font-semibold mb-1">
+                <span class="text-slate-600">教師填報率</span>
+                <span id="overall-percentage" class="text-emerald-600">0% (0/0人)</span>
+              </div>
+              <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                <div id="overall-progress-bar" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1.5" id="overall-desc-text">（註：每位教師僅需填報 1 天）</p>
+            </div>
+
+            <div class="border-t border-slate-100 pt-3">
+              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">教師登記進度</h4>
+              <div class="space-y-2.5 max-h-48 overflow-y-auto pr-1" id="teacher-stats-list">
+                </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-3 hidden lg:block no-print">
+          <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+            <i data-lucide="sliders" class="w-4 h-4 text-emerald-600"></i>
+            系統工具箱
+          </h3>
+          
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="runAutoSchedule()" class="col-span-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm rounded-xl transition-all shadow-sm hover:shadow flex items-center justify-center gap-2">
+              <i data-lucide="sparkles" class="w-4 h-4"></i>
+              💡 一鍵智慧排班
+            </button>
+
+            <button onclick="exportToCSV()" class="py-2 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-sm rounded-xl transition-all flex items-center justify-center gap-1.5">
+              <i data-lucide="download" class="w-4 h-4 text-blue-600"></i>
+              匯出 CSV
+            </button>
+
+            <button onclick="window.print()" class="py-2 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-sm rounded-xl transition-all flex items-center justify-center gap-1.5">
+              <i data-lucide="printer" class="w-4 h-4 text-purple-600"></i>
+              友善列印
+            </button>
+          </div>
+
+          <button onclick="confirmClearAll()" class="w-full py-2 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            清空重設日程表
+          </button>
+        </div>
+
+      </aside>
+
+      <main class="lg:col-span-8 bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-100 print-full">
+        <div class="flex items-center justify-between mb-6 no-print">
+          <div class="flex items-center gap-2">
+            <span class="w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span class="text-sm font-semibold text-slate-500">即時雲端同步中...</span>
+          </div>
+          <div class="flex items-center gap-4 text-xs text-slate-400">
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-slate-100 border border-slate-200 rounded"></span> 可選日期</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 bg-striped border border-slate-200 rounded"></span> 鎖定日期</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-5 gap-2 md:gap-4 mb-2 text-center text-sm md:text-base font-bold text-slate-500">
+          <div class="py-2 bg-slate-50 rounded-lg print-border">一</div>
+          <div class="py-2 bg-slate-50 rounded-lg print-border">二</div>
+          <div class="py-2 bg-slate-50 rounded-lg print-border">三</div>
+          <div class="py-2 bg-slate-50 rounded-lg print-border">四</div>
+          <div class="py-2 bg-slate-50 rounded-lg print-border">五</div>
+        </div>
+
+        <div class="grid grid-cols-5 gap-2 md:gap-4 calendar-grid" id="calendar-grid">
+          </div>
+
+        <footer class="mt-8 pt-4 border-t border-slate-100 text-center text-xs text-slate-400 no-print">
+          本系統已連接 Firebase 雲端資料庫，任何變更將即時同步至所有使用者的畫面。
+        </footer>
+      </main>
+
+    </div>
+
+    <div class="mt-6 block lg:hidden no-print">
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-3">
+        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-emerald-600"></i>
+          系統工具箱
+        </h3>
+        
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="runAutoSchedule()" class="col-span-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm rounded-xl transition-all shadow-sm hover:shadow flex items-center justify-center gap-2">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+            💡 一鍵智慧排班
+          </button>
+
+          <button onclick="exportToCSV()" class="py-2 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-sm rounded-xl transition-all flex items-center justify-center gap-1.5">
+            <i data-lucide="download" class="w-4 h-4 text-blue-600"></i>
+            匯出 CSV
+          </button>
+
+          <button onclick="window.print()" class="py-2 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-sm rounded-xl transition-all flex items-center justify-center gap-1.5">
+            <i data-lucide="printer" class="w-4 h-4 text-purple-600"></i>
+            友善列印
+          </button>
+        </div>
+
+        <button onclick="confirmClearAll()" class="w-full py-2 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          清空重設日程表
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="teacher-select-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-3xl p-6 max-w-sm w-full mx-4 shadow-2xl transform scale-95 transition-transform duration-300">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-extrabold text-lg text-slate-800 flex items-center gap-1.5">
+          <i data-lucide="user-plus" class="w-5 h-5 text-emerald-600"></i>
+          請選擇備課教師
+        </h3>
+        <button onclick="closeTeacherModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500 mb-4" id="modal-date-info">請為此日期指派備課人員：</p>
+      <div class="grid grid-cols-3 gap-2" id="modal-teachers-list"></div>
+    </div>
+  </div>
+
+  <div id="confirm-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-3xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+      <div class="flex items-center gap-3 text-rose-600 mb-4">
+        <div class="p-2 bg-rose-50 rounded-xl">
+          <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+        </div>
+        <h3 class="font-extrabold text-lg">確認清除所有資料？</h3>
+      </div>
+      <p class="text-sm text-slate-600 mb-6">此動作將會排空所有已填報的備課日程（包含自訂姓名欄），且無法還原。雲端資料將同步清空，確定嗎？</p>
+      <div class="flex justify-end gap-3">
+        <button onclick="closeConfirmModal()" class="px-4 py-2 text-slate-500 hover:bg-slate-100 font-semibold text-sm rounded-xl">
+          取消
+        </button>
+        <button onclick="clearAllData()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-sm rounded-xl">
+          確定清除
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 預設教師名單與色調
+    const TEACHERS = ['庭安', '一蓁', '嘉瑋', '士頡', '貴香', '思寧', '柔棉', '志宏', '彥芃'];
+    const TEACHER_COLORS = {
+      '庭安': { bg: 'bg-rose-50 hover:bg-rose-100 border-rose-200 text-rose-800', badge: 'bg-rose-100 text-rose-800 border-rose-200', text: 'text-rose-600' },
+      '一蓁': { bg: 'bg-orange-50 hover:bg-orange-100 border-orange-200 text-orange-800', badge: 'bg-orange-100 text-orange-800 border-orange-200', text: 'text-orange-600' },
+      '嘉瑋': { bg: 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-800', badge: 'bg-amber-100 text-amber-800 border-amber-200', text: 'text-amber-600' },
+      '士頡': { bg: 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-800', badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', text: 'text-emerald-600' },
+      '貴香': { bg: 'bg-teal-50 hover:bg-teal-100 border-teal-200 text-teal-800', badge: 'bg-teal-100 text-teal-800 border-teal-200', text: 'text-teal-600' },
+      '思寧': { bg: 'bg-sky-50 hover:bg-sky-100 border-sky-200 text-sky-800', badge: 'bg-sky-100 text-sky-800 border-sky-200', text: 'text-sky-600' },
+      '柔棉': { bg: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-800', badge: 'bg-indigo-100 text-indigo-800 border-indigo-200', text: 'text-indigo-600' },
+      '志宏': { bg: 'bg-violet-50 hover:bg-violet-100 border-violet-200 text-violet-800', badge: 'bg-violet-100 text-violet-800 border-violet-200', text: 'text-violet-600' },
+      '彥芃': { bg: 'bg-fuchsia-50 hover:bg-fuchsia-100 border-fuchsia-200 text-fuchsia-800', badge: 'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200', text: 'text-fuchsia-600' }
+    };
+
+    // --- Firebase 初始化區塊 ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyDuAjBDI8JhKZJg9lNNfL9hacE5Kc-YaqQ",
+      authDomain: "nyps-pd.firebaseapp.com",
+      databaseURL: "https://nyps-pd-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "nyps-pd",
+      storageBucket: "nyps-pd.firebasestorage.app",
+      messagingSenderId: "336915368523",
+      appId: "1:336915368523:web:741a47bae60fc22cc4dbce"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const dbRef = db.ref('prep_day_115_08_system');
+
+    // 系統本地狀態 (預設為空值框架)
+    let state = {
+      selectedTeacher: null,
+      targetDateForModal: null,
+      customTeachers: ['', '', ''],
+      calendar: {
+        "8/3": [], "8/4": [], "8/5": [], "8/6": [], "8/7": [],
+        "8/10": [], "8/11": [], "8/12": [], "8/13": [], "8/14": [],
+        "8/17": [], "8/18": [], "8/19": [], "8/20": [], "8/21": [],
+        "8/24": [], "8/25": [], "8/26": [], "8/27": [], "8/28": null,
+        "8/31": null
+      }
+    };
+
+    // Firebase 實時監聽：當雲端資料改變，即時更新 state 並重新渲染
+    dbRef.on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        if (data.calendar) state.calendar = data.calendar;
+        if (data.customTeachers) state.customTeachers = data.customTeachers;
+      } else {
+        // 如果資料庫是空的(初次執行)，將預設架構推上雲端
+        saveToCloud();
+      }
+      renderAll();
+    });
+
+    // 將資料同步寫入 Firebase
+    function saveToCloud() {
+      dbRef.set({
+        calendar: state.calendar,
+        customTeachers: state.customTeachers
+      });
+      // 寫入後不用主動呼叫 renderAll()，因為 on('value') 會捕捉到變更並自動渲染
+    }
+
+    const WEEKS_DATA = [
+      ["8/3", "8/4", "8/5", "8/6", "8/7"],
+      ["8/10", "8/11", "8/12", "8/13", "8/14"],
+      ["8/17", "8/18", "8/19", "8/20", "8/21"],
+      ["8/24", "8/25", "8/26", "8/27", "8/28"],
+      ["8/31", "", "", "", ""]
+    ];
+
+    function getTeacherStyle(name) {
+      if (TEACHER_COLORS[name]) return TEACHER_COLORS[name];
+      const customIdx = state.customTeachers.indexOf(name);
+      if (customIdx === 0) return { bg: 'bg-slate-50 hover:bg-slate-100 border-slate-300 text-slate-800', badge: 'bg-slate-200 text-slate-800 border-slate-300', text: 'text-slate-500' };
+      if (customIdx === 1) return { bg: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-800', badge: 'bg-indigo-100 text-indigo-800 border-indigo-200', text: 'text-indigo-600' };
+      if (customIdx === 2) return { bg: 'bg-cyan-50 hover:bg-cyan-100 border-cyan-200 text-cyan-800', badge: 'bg-cyan-100 text-cyan-800 border-cyan-200', text: 'text-cyan-600' };
+      return { bg: 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800', badge: 'bg-slate-100 text-slate-800 border-slate-200', text: 'text-slate-500' };
+    }
+
+    function getActiveTeachers() {
+      const activeCustoms = state.customTeachers.filter(name => name.trim() !== '');
+      return [...TEACHERS, ...activeCustoms];
+    }
+
+    window.onload = function() {
+      const today = new Date();
+      document.getElementById('print-date').textContent = `${today.getFullYear() - 1911}/${today.getMonth() + 1}/${today.getDate()}`;
+      lucide.createIcons();
+    };
+
+    // 總渲染調度 (加入保留 Focus 的邏輯防呆)
+    function renderAll() {
+      // 記憶目前是否有輸入框處於 focus 狀態
+      const activeElement = document.activeElement;
+      const focusedId = activeElement && activeElement.id && activeElement.id.startsWith('custom-input') ? activeElement.id : null;
+      const cursorPosition = focusedId ? activeElement.selectionStart : null;
+
+      renderTeacherPool();
+      renderCalendar();
+      renderStats();
+      lucide.createIcons();
+
+      // 如果剛剛有輸入框被選取，渲染完畢後把焦點還給它，避免打字被打斷
+      if (focusedId) {
+        const newElement = document.getElementById(focusedId);
+        if (newElement) {
+          newElement.focus();
+          newElement.setSelectionRange(cursorPosition, cursorPosition);
+        }
+      }
+    }
+
+    function renderTeacherPool() {
+      const pool = document.getElementById('teacher-pool');
+      pool.innerHTML = '';
+
+      TEACHERS.forEach(name => {
+        const count = getTeacherAssignmentCount(name);
+        const style = getTeacherStyle(name);
+        const isActive = state.selectedTeacher === name;
+        const isDone = count >= 1;
+
+        const cardClass = `relative flex flex-col items-center justify-center p-3 rounded-2xl border transition-all cursor-pointer select-none ${style.bg} ${isActive ? 'ring-4 ring-emerald-500 scale-105 border-transparent shadow-md' : 'shadow-sm active:scale-95'} ${isDone ? 'opacity-70' : 'opacity-100'}`;
+        pool.innerHTML += `
+          <div class="${cardClass}" draggable="true" ondragstart="onDragStart(event, '${name}')" onclick="toggleStampMode('${name}')" title="電腦可拖曳此卡片，或點擊啟用蓋章模式">
+            <span class="font-bold text-sm tracking-wide ${isDone ? 'line-through text-slate-500' : ''}">${name}</span>
+            <span class="text-[10px] opacity-75 mt-1">${isDone ? '已填報' : '未填報'}</span>
+            ${isDone ? `<span class="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white p-0.5 rounded-full shadow"><i data-lucide="check" class="w-3 h-3"></i></span>` : ''}
+            ${isActive && !isDone ? `<span class="absolute -top-1.5 -right-1.5 bg-amber-500 text-white p-0.5 rounded-full shadow"><i data-lucide="pencil-ruler" class="w-3 h-3"></i></span>` : ''}
+          </div>
+        `;
+      });
+
+      for (let i = 0; i < 3; i++) {
+        const name = state.customTeachers[i] || '';
+        const count = name ? getTeacherAssignmentCount(name) : 0;
+        const isDone = count >= 1;
+        const isActive = state.selectedTeacher === name && name !== '';
+
+        const style = name ? getTeacherStyle(name) : { bg: 'border-dashed border-slate-200 bg-slate-50/50 hover:bg-slate-50 text-slate-400' };
+        const cardClass = `custom-card relative flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all select-none ${style.bg} ${isActive ? 'ring-4 ring-emerald-500 scale-105 border-transparent shadow-md' : 'shadow-sm'} ${isDone ? 'opacity-70' : 'opacity-100'}`;
+        
+        pool.innerHTML += `
+          <div class="${cardClass}" id="custom-card-${i}" draggable="${name ? 'true' : 'false'}" ondragstart="onDragStart(event, '${name}')" onclick="handleCustomCardClick(event, '${name}', ${i})" title="${name ? '拖曳此姓名，或點擊空白處蓋章' : '點擊自訂框鍵入教師姓名'}">
+            <div class="w-full px-0.5">
+              <input type="text" id="custom-input-${i}" class="w-full text-center font-bold text-sm bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none placeholder-slate-400 text-slate-800 transition-colors py-0.5" placeholder="➕ 自訂姓名" value="${name}" onfocus="disableDrag(this); this.select();" onblur="finalizeCustomTeacher(${i})" oninput="handleCustomInput(${i}, this.value)" onkeydown="if(event.key === 'Enter') this.blur();">
+            </div>
+            <span class="text-[10px] text-slate-400 mt-1 pointer-events-none">${name ? (isDone ? '已填報' : '未填報') : '空白格'}</span>
+            ${isDone ? `<span class="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white p-0.5 rounded-full shadow"><i data-lucide="check" class="w-3 h-3"></i></span>` : ''}
+            ${isActive && !isDone ? `<span class="absolute -top-1.5 -right-1.5 bg-amber-500 text-white p-0.5 rounded-full shadow"><i data-lucide="pencil-ruler" class="w-3 h-3"></i></span>` : ''}
+          </div>
+        `;
+      }
+
+      const indicator = document.getElementById('stamp-indicator');
+      if (state.selectedTeacher) {
+        document.getElementById('stamp-teacher-name').textContent = state.selectedTeacher;
+        indicator.classList.remove('hidden');
+      } else {
+        indicator.classList.add('hidden');
+      }
+    }
+
+    function renderCalendar() {
+      const grid = document.getElementById('calendar-grid');
+      grid.innerHTML = '';
+
+      WEEKS_DATA.forEach(week => {
+        week.forEach(dayKey => {
+          if (!dayKey) {
+            grid.innerHTML += `<div class="bg-slate-50/50 rounded-2xl border border-dashed border-slate-100 min-h-[140px] flex items-center justify-center print:border-none print:bg-transparent"><span class="text-xs text-slate-300 print:hidden">非本月排程</span></div>`;
+            return;
+          }
+
+          const isBlocked = (dayKey === "8/28" || dayKey === "8/31");
+          const list = state.calendar[dayKey] || [];
+          let dayCardHTML = '';
+
+          if (isBlocked) {
+            const reason = dayKey === "8/28" ? "返校日" : "開學日";
+            dayCardHTML = `
+              <div class="bg-striped rounded-2xl border border-slate-200 p-3 min-h-[140px] flex flex-col justify-between select-none print-border">
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-xs font-bold text-slate-500">${dayKey}</span>
+                  <span class="text-[10px] bg-rose-100 text-rose-700 font-bold px-1.5 py-0.5 rounded-full">${reason}</span>
+                </div>
+                <div class="flex-1 flex flex-col items-center justify-center py-4 text-slate-400">
+                  <i data-lucide="lock" class="w-6 h-6 mb-1.5 opacity-60"></i><span class="text-xs font-bold">不可填報</span>
+                </div>
+              </div>`;
+          } else {
+            const isFull = list.length >= 2;
+            const badgeClass = isFull ? 'bg-rose-50 text-rose-700 border-rose-200' : list.length === 1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-500 border-slate-200';
+            const badgeText = `${list.length}/2 人`;
+
+            dayCardHTML = `
+              <div class="bg-white rounded-2xl border border-slate-200 hover:border-emerald-300 hover:shadow-md p-3 min-h-[140px] flex flex-col justify-between transition-all duration-200 print-border" ondragover="allowDrop(event)" ondrop="onDrop(event, '${dayKey}')">
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-xs md:text-sm font-black text-slate-700">${dayKey}</span>
+                  <span class="text-[10px] font-bold border px-2 py-0.5 rounded-full ${badgeClass} print:hidden">${badgeText}</span>
+                  <span class="text-[9px] font-bold text-slate-400 hidden print:block">${list.length}人填報</span>
+                </div>
+                <div class="space-y-1.5 my-2 flex-1 flex flex-col justify-start">
+                  ${list.map((name, idx) => {
+                    const style = getTeacherStyle(name);
+                    return `
+                      <div class="group flex items-center justify-between text-xs font-bold py-1 px-2.5 rounded-xl border ${style.badge} transition-all">
+                        <span class="truncate">${name}</span>
+                        <button onclick="removeAssignment('${dayKey}', ${idx})" class="text-slate-400 hover:text-rose-600 p-0.5 rounded transition-colors no-print" title="刪除此登記"><i data-lucide="x" class="w-3 h-3"></i></button>
+                      </div>`;
+                  }).join('')}
+                  ${Array.from({ length: Math.max(0, 2 - list.length) }).map(() => `
+                    <div onclick="handleSlotClick('${dayKey}')" class="border border-dashed border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/30 text-slate-400 hover:text-emerald-700 text-[11px] font-medium py-1.5 px-2 rounded-xl text-center cursor-pointer transition-all flex items-center justify-center gap-1.5 no-print">
+                      <i data-lucide="plus" class="w-3.5 h-3.5 opacity-60"></i><span>${state.selectedTeacher ? '蓋章至此' : '填報'}</span>
+                    </div>`).join('')}
+                </div>
+              </div>`;
+          }
+          grid.innerHTML += dayCardHTML;
+        });
+      });
+    }
+
+    function renderStats() {
+      const activeTeachers = getActiveTeachers();
+      const totalSlots = activeTeachers.length; 
+      let filledSlots = 0;
+      
+      Object.keys(state.calendar).forEach(day => {
+        if (state.calendar[day] && Array.isArray(state.calendar[day])) filledSlots += state.calendar[day].length;
+      });
+      const percentage = totalSlots > 0 ? Math.min(100, Math.round((filledSlots / totalSlots) * 100)) : 0;
+      
+      document.getElementById('overall-percentage').textContent = `${percentage}% (${filledSlots}/${totalSlots} 人已登記)`;
+      document.getElementById('overall-progress-bar').style.width = `${percentage}%`;
+      document.getElementById('overall-desc-text').textContent = `（註：當前有 ${totalSlots} 位登記教師，每人僅需登記 1 天）`;
+      document.getElementById('print-progress').textContent = `${percentage}% (${filledSlots}/${totalSlots} 人已登記)`;
+      
+      const statsList = document.getElementById('teacher-stats-list');
+      statsList.innerHTML = '';
+      if (totalSlots === 0) {
+        statsList.innerHTML = '<div class="text-xs text-slate-400 text-center py-4">請在上方名單中新增自訂姓名或使用預設名單</div>';
+        return;
+      }
+
+      activeTeachers.forEach(name => {
+        const count = getTeacherAssignmentCount(name);
+        const style = getTeacherStyle(name);
+        const targetPercent = Math.min(100, Math.round((count / 1) * 100));
+        const barColor = count === 1 ? 'bg-emerald-500' : count > 1 ? 'bg-rose-500' : 'bg-slate-200';
+
+        statsList.innerHTML += `
+          <div class="text-xs">
+            <div class="flex justify-between items-center mb-1">
+              <span class="font-bold text-slate-700 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full ${style.text.replace('text-', 'bg-')}"></span>${name}</span>
+              <span class="text-slate-500 font-medium">${count} / 1 天</span>
+            </div>
+            <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden border border-slate-100">
+              <div class="h-full ${barColor} transition-all duration-300" style="width: ${targetPercent}%"></div>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // --- 互動邏輯更新區塊 ---
+
+    function disableDrag(inputEl) {
+      const card = inputEl.closest('.custom-card');
+      if (card) card.setAttribute('draggable', 'false');
+    }
+
+    function enableDrag(inputEl, index) {
+      const card = inputEl.closest('.custom-card');
+      const value = state.customTeachers[index];
+      if (card && value && value.trim() !== '') card.setAttribute('draggable', 'true');
+      else if (card) card.setAttribute('draggable', 'false');
+    }
+
+    function handleCustomCardClick(event, name, index) {
+      if (event.target.tagName.toLowerCase() === 'input') return;
+      if (!name) {
+        const input = document.getElementById(`custom-input-${index}`);
+        if (input) input.focus();
+        return;
+      }
+      toggleStampMode(name);
+    }
+
+    function handleCustomInput(index, value) {
+      const oldName = state.customTeachers[index];
+      const newName = value.trim();
+      state.customTeachers[index] = newName;
+
+      if (oldName && oldName !== '') {
+        Object.keys(state.calendar).forEach(day => {
+          if (state.calendar[day] && Array.isArray(state.calendar[day])) {
+            if (newName === '') state.calendar[day] = state.calendar[day].filter(n => n !== oldName);
+            else state.calendar[day] = state.calendar[day].map(n => n === oldName ? newName : n);
+          }
+        });
+      }
+      // 此處不馬上 sync 雲端，防止別的使用者正在打字時畫面跳轉；而是等 blur 時統一上傳
+      renderCalendar();
+      renderStats();
+      lucide.createIcons();
+    }
+
+    function finalizeCustomTeacher(index) {
+      const input = document.getElementById(`custom-input-${index}`);
+      if (!input) return;
+
+      const val = input.value.trim();
+      if (val !== '') {
+        const isDuplicate = TEACHERS.includes(val) || state.customTeachers.some((t, idx) => idx !== index && t === val);
+        if (isDuplicate) {
+          showToast(`教師名稱【${val}】已存在，請勿重複命名！`, 'warning');
+          state.customTeachers[index] = '';
+          input.value = '';
+          Object.keys(state.calendar).forEach(day => {
+            if (state.calendar[day] && Array.isArray(state.calendar[day])) {
+              state.calendar[day] = state.calendar[day].filter(n => n !== val);
+            }
+          });
+        }
+      }
+      enableDrag(input, index);
+      state.selectedTeacher = null;
+      
+      saveToCloud(); // 輸入結束後，同步至雲端
+    }
+
+    function getTeacherAssignmentCount(name) {
+      let count = 0;
+      Object.keys(state.calendar).forEach(day => {
+        if (state.calendar[day] && Array.isArray(state.calendar[day])) {
+          if (state.calendar[day].includes(name)) count++;
+        }
+      });
+      return count;
+    }
+
+    function handleSlotClick(dayKey) {
+      if (state.selectedTeacher) {
+        assignTeacherToDate(state.selectedTeacher, dayKey);
+        cancelStampMode();
+      } else {
+        openTeacherModal(dayKey);
+      }
+    }
+
+    function assignTeacherToDate(name, dayKey) {
+      const list = state.calendar[dayKey] || [];
+      if (list.length >= 2) {
+        showToast(`8/${dayKey.split('/')[1]} 備課日登記已滿 (每日上限2人)！`, 'warning');
+        return false;
+      }
+      if (getTeacherAssignmentCount(name) >= 1) {
+        showToast(`【${name}】已登記過其他備課日！每位教師限登記 1 天。`, 'warning');
+        return false;
+      }
+      state.calendar[dayKey].push(name);
+      saveToCloud(); // 取代 saveAndRender
+      showToast("成功填入【" + name + "】於 8/" + dayKey.split('/')[1] + " 備課日", "success");
+      return true;
+    }
+
+    function removeAssignment(dayKey, index) {
+      const removedName = state.calendar[dayKey][index];
+      state.calendar[dayKey].splice(index, 1);
+      saveToCloud(); // 取代 saveAndRender
+      showToast("已移除【" + removedName + "】在 8/" + dayKey.split('/')[1] + " 的登記", "info");
+    }
+
+    function onDragStart(event, name) {
+      if (!name) return;
+      event.dataTransfer.setData('text/plain', name);
+      state.selectedTeacher = null;
+      renderTeacherPool();
+    }
+
+    function allowDrop(event) { event.preventDefault(); }
+    function onDrop(event, dayKey) {
+      event.preventDefault();
+      const name = event.dataTransfer.getData('text/plain');
+      if (name) assignTeacherToDate(name, dayKey);
+    }
+
+    function toggleStampMode(name) {
+      if (!name) return;
+      if (getTeacherAssignmentCount(name) >= 1) {
+        showToast(`【${name}】已完成備課日登記，不需再次登記。`, 'info');
+        return;
+      }
+      if (state.selectedTeacher === name) cancelStampMode();
+      else {
+        state.selectedTeacher = name;
+        renderAll();
+        showToast("已啟用蓋章：請點擊行事曆空位將【" + name + "】登記。", "info");
+      }
+    }
+
+    function cancelStampMode() {
+      state.selectedTeacher = null;
+      renderTeacherPool();
+    }
+
+    function openTeacherModal(dayKey) {
+      state.targetDateForModal = dayKey;
+      const modal = document.getElementById('teacher-select-modal');
+      const inner = modal.querySelector('div');
+      document.getElementById('modal-date-info').textContent = `指派教師至：8 月 ${dayKey.split('/')[1]} 日備課日 (每日上限 2 人)`;
+      
+      const listContainer = document.getElementById('modal-teachers-list');
+      listContainer.innerHTML = '';
+      const activeTeachers = getActiveTeachers();
+
+      if (activeTeachers.length === 0) {
+        listContainer.innerHTML = `<div class="col-span-3 text-xs text-slate-400 text-center py-4">名單中尚無可用教師！</div>`;
+      } else {
+        activeTeachers.forEach(name => {
+          const isAssignedAnywhere = getTeacherAssignmentCount(name) >= 1;
+          const style = getTeacherStyle(name);
+          listContainer.innerHTML += `
+            <button onclick="selectTeacherFromModal('${name}')" ${isAssignedAnywhere ? 'disabled class="opacity-40 line-through p-3 text-xs font-bold border border-slate-200 rounded-xl bg-slate-100 text-slate-400 text-center cursor-not-allowed"' : `class="p-3 text-xs font-bold border rounded-xl hover:scale-105 active:scale-95 transition-all text-center ${style.badge}"`}>
+              ${name}
+            </button>`;
+        });
+      }
+      modal.classList.remove('hidden');
+      setTimeout(() => { modal.classList.remove('opacity-0'); inner.classList.remove('scale-95'); }, 10);
+    }
+
+    function closeTeacherModal() {
+      const modal = document.getElementById('teacher-select-modal');
+      const inner = modal.querySelector('div');
+      modal.classList.add('opacity-0');
+      inner.classList.add('scale-95');
+      setTimeout(() => { modal.classList.add('hidden'); state.targetDateForModal = null; }, 300);
+    }
+
+    function selectTeacherFromModal(name) {
+      if (state.targetDateForModal) {
+        const success = assignTeacherToDate(name, state.targetDateForModal);
+        if (success) closeTeacherModal();
+      }
+    }
+
+    function runAutoSchedule() {
+      const activeDays = ["8/3", "8/4", "8/5", "8/6", "8/7", "8/10", "8/11", "8/12", "8/13", "8/14", "8/17", "8/18", "8/19", "8/20", "8/21", "8/24", "8/25", "8/26", "8/27"];
+      const activeTeachers = getActiveTeachers();
+
+      if (activeTeachers.length === 0) {
+        showToast("目前教師名單皆為空白，無法自動排班！", "warning");
+        return;
+      }
+      
+      let testCalendar = {};
+      activeDays.forEach(d => testCalendar[d] = []);
+      let shuffledTeachers = [...activeTeachers].sort(() => Math.random() - 0.5);
+      let shuffledDays = [...activeDays].sort(() => Math.random() - 0.5);
+
+      for (let i = 0; i < shuffledTeachers.length; i++) {
+        testCalendar[shuffledDays[i]].push(shuffledTeachers[i]);
+      }
+
+      state.calendar = { ...testCalendar, "8/28": null, "8/31": null };
+      saveToCloud(); // 智慧排班同步雲端
+      showToast(`💡 智慧自動排班完成！已將當前 ${activeTeachers.length} 位登記教師完美隨機分流！`, "success");
+    }
+
+    function confirmClearAll() { document.getElementById('confirm-modal').classList.remove('hidden'); }
+    function closeConfirmModal() { document.getElementById('confirm-modal').classList.add('hidden'); }
+
+    function clearAllData() {
+      state.calendar = {
+        "8/3": [], "8/4": [], "8/5": [], "8/6": [], "8/7": [],
+        "8/10": [], "8/11": [], "8/12": [], "8/13": [], "8/14": [],
+        "8/17": [], "8/18": [], "8/19": [], "8/20": [], "8/21": [],
+        "8/24": [], "8/25": [], "8/26": [], "8/27": [], "8/28": null, "8/31": null
+      };
+      state.customTeachers = ['', '', ''];
+      
+      saveToCloud(); // 覆蓋雲端資料
+      closeConfirmModal();
+      showToast("雲端備課日程表與自訂教師已全部清空重置。", "info");
+    }
+
+    function exportToCSV() {
+      let csvContent = "鳥嶼國小115學年度8月份備課日填報表,,,,\n一,二,三,四,五\n";
+      WEEKS_DATA.forEach(week => {
+        csvContent += week.map(day => {
+          if (!day) return "";
+          if (day === "8/28") return '"8/28\n(返校日)"';
+          if (day === "8/31") return '"8/31\n(開學)"';
+          return day;
+        }).join(",") + "\n";
+
+        csvContent += week.map(day => (!day || day === "8/28" || day === "8/31") ? "" : (state.calendar[day] || [])[0] || "").join(",") + "\n";
+        csvContent += week.map(day => (!day || day === "8/28" || day === "8/31") ? "" : (state.calendar[day] || [])[1] || "").join(",") + "\n";
+      });
+
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "鳥嶼國小115學年度8月份備課日填報表.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("CSV 檔案匯出成功！已自動以 UTF-8 BOM 編碼儲存。", "success");
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      
+      const colors = { success: 'bg-emerald-600 border-emerald-500 text-white', error: 'bg-rose-600 border-rose-500 text-white', warning: 'bg-amber-500 border-amber-400 text-slate-900', info: 'bg-slate-800 border-slate-700 text-white' };
+      const icons = { success: 'check-circle', error: 'alert-circle', warning: 'alert-triangle', info: 'info' };
+
+      toast.className = `flex items-center gap-2.5 px-4 py-3 rounded-2xl border shadow-xl transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto ${colors[type]}`;
+      toast.innerHTML = `<i data-lucide="${icons[type]}" class="w-4 h-4 flex-shrink-0"></i><span class="font-bold text-xs tracking-wide">${message}</span>`;
+      
+      container.appendChild(toast);
+      lucide.createIcons();
+      setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
+      setTimeout(() => { toast.classList.add('translate-y-2', 'opacity-0'); setTimeout(() => toast.remove(), 300); }, 3000);
+    }
+  </script>
+</body>
+</html>
