@@ -7,6 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   
+  <!-- Firebase App 與 Realtime Database -->
   <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
 
@@ -60,7 +61,7 @@
             <li><span class="font-semibold text-slate-800">8/28 (返校日)</span> 與 <span class="font-semibold text-slate-800">8/31 (開學日)</span> 不可填報。</li>
             <li>其餘平日每天<span class="text-rose-600 font-semibold">最多 2 人</span>登記。</li>
             <li>每位教師<span class="text-emerald-600 font-semibold">僅需且限制填報 1 天</span>.</li>
-            <li>支援自訂教師：底端設有三個自訂框，直接輸入名字即可。</li>
+            <li>支援自訂教師：底端設有 4 個自訂框，直接輸入名字即可。</li>
             <li>本系統支援：拖曳排班、點擊蓋章、直接選人。</li>
           </ul>
         </div>
@@ -169,6 +170,7 @@
     </div>
   </div>
 
+  <!-- 彈窗區塊 -->
   <div id="teacher-select-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
     <div class="bg-white rounded-3xl p-6 max-w-sm w-full mx-4 shadow-2xl transform scale-95 transition-transform duration-300">
       <div class="flex items-center justify-between mb-4">
@@ -195,7 +197,10 @@
   </div>
 
   <script>
-    const TEACHERS = ['庭安', '一蓁', '嘉瑋', '貴香', '思寧', '士頡', '柔棉', '志宏', '彥芃'];
+    // 移除固定的柔棉，剩餘 8 位預設教師
+    const TEACHERS = ['庭安', '一蓁', '嘉瑋', '貴香', '思寧', '士頡', '志宏', '彥芃'];
+    
+    // 保留柔棉的樣式，如果老師們手動輸入「柔棉」，依然會套用原本的漂亮紫色！
     const TEACHER_COLORS = {
       '庭安': { bg: 'bg-rose-50 hover:bg-rose-100 border-rose-200 text-rose-800', badge: 'bg-rose-100 text-rose-800 border-rose-200', text: 'text-rose-600' },
       '一蓁': { bg: 'bg-orange-50 hover:bg-orange-100 border-orange-200 text-orange-800', badge: 'bg-orange-100 text-orange-800 border-orange-200', text: 'text-orange-600' },
@@ -223,11 +228,11 @@
     const db = firebase.database();
     const dbRef = db.ref('prep_day_115_08_system');
 
-    // 關鍵修復：Firebase key 禁止使用 '/'，內部統一改用 '-'
+    // 將 customTeachers 預設改為 4 個空位
     let state = {
       selectedTeacher: null,
       targetDateForModal: null,
-      customTeachers: ['', '', ''],
+      customTeachers: ['', '', '', ''],
       calendar: {
         "8-3": [], "8-4": [], "8-5": [], "8-6": [], "8-7": [],
         "8-10": [], "8-11": [], "8-12": [], "8-13": [], "8-14": [],
@@ -248,7 +253,13 @@
       const data = snapshot.val();
       if (data) {
         if (data.calendar) state.calendar = data.calendar;
-        if (data.customTeachers) state.customTeachers = data.customTeachers;
+        if (data.customTeachers) {
+          state.customTeachers = data.customTeachers;
+          // 防呆：如果雲端存的是舊版的 3 個空位，自動補齊第 4 個，確保畫面不跑版
+          while (state.customTeachers.length < 4) {
+            state.customTeachers.push('');
+          }
+        }
       } else {
         dbRef.set({ calendar: state.calendar, customTeachers: state.customTeachers });
       }
@@ -275,7 +286,6 @@
       });
     }
 
-    // WEEKS_DATA 也改用 '-'
     const WEEKS_DATA = [
       ["8-3", "8-4", "8-5", "8-6", "8-7"],
       ["8-10", "8-11", "8-12", "8-13", "8-14"],
@@ -290,6 +300,7 @@
       if (customIdx === 0) return { bg: 'bg-slate-50 hover:bg-slate-100 border-slate-300 text-slate-800', badge: 'bg-slate-200 text-slate-800 border-slate-300', text: 'text-slate-500' };
       if (customIdx === 1) return { bg: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-800', badge: 'bg-indigo-100 text-indigo-800 border-indigo-200', text: 'text-indigo-600' };
       if (customIdx === 2) return { bg: 'bg-cyan-50 hover:bg-cyan-100 border-cyan-200 text-cyan-800', badge: 'bg-cyan-100 text-cyan-800 border-cyan-200', text: 'text-cyan-600' };
+      if (customIdx === 3) return { bg: 'bg-fuchsia-50 hover:bg-fuchsia-100 border-fuchsia-200 text-fuchsia-800', badge: 'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200', text: 'text-fuchsia-600' }; // 第 4 個空位的新配色
       return { bg: 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800', badge: 'bg-slate-100 text-slate-800 border-slate-200', text: 'text-slate-500' };
     }
 
@@ -338,7 +349,8 @@
         `;
       });
 
-      for (let i = 0; i < 3; i++) {
+      // 迴圈改為 4 次，渲染 4 個自訂教師格子
+      for (let i = 0; i < 4; i++) {
         const name = state.customTeachers[i] || '';
         const count = name ? getTeacherAssignmentCount(name) : 0;
         const isDone = count >= 1;
@@ -381,7 +393,7 @@
 
           const isBlocked = (dayKey === "8-28" || dayKey === "8-31");
           const list = (state.calendar && state.calendar[dayKey]) ? state.calendar[dayKey] : [];
-          const displayDate = dayKey.replace('-', '/'); // 轉回 8/3 顯示給使用者看
+          const displayDate = dayKey.replace('-', '/'); 
           let dayCardHTML = '';
 
           if (isBlocked) {
@@ -553,8 +565,7 @@
       }
     }
 
-   function assignTeacherToDate(name, dayKey) {
-      // 1. 取得該日期的名單，確保不會讀取失敗
+    function assignTeacherToDate(name, dayKey) {
       const list = state.calendar[dayKey] || [];
       
       if (list.length >= 2) {
@@ -566,20 +577,18 @@
         return false;
       }
       
-      // 🌟 關鍵修復：對抗 Firebase 自動刪除空陣列的特性
+      // 修復：對抗 Firebase 自動刪除空陣列的特性
       if (!state.calendar[dayKey]) {
         state.calendar[dayKey] = [];
       }
       
-      // 寫入名單並上傳雲端
       state.calendar[dayKey].push(name);
       saveToCloud(); 
       showToast("成功填入【" + name + "】於 8/" + dayKey.split('-')[1] + " 備課日", "success");
       return true;
     }
 
-function removeAssignment(dayKey, index) {
-      // 防呆：如果雲端剛好沒有這個日期的資料，直接中斷
+    function removeAssignment(dayKey, index) {
       if (!state.calendar[dayKey]) return; 
 
       const removedName = state.calendar[dayKey][index];
@@ -695,7 +704,8 @@ function removeAssignment(dayKey, index) {
         "8-17": [], "8-18": [], "8-19": [], "8-20": [], "8-21": [],
         "8-24": [], "8-25": [], "8-26": [], "8-27": [], "8-28": null, "8-31": null
       };
-      state.customTeachers = ['', '', ''];
+      // 將清除資料時的預設值也改為 4 個空位
+      state.customTeachers = ['', '', '', ''];
       saveToCloud();
       closeConfirmModal();
       showToast("雲端備課日程表與自訂教師已全部清空重置。", "info");
