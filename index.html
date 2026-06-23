@@ -553,8 +553,10 @@
       }
     }
 
-    function assignTeacherToDate(name, dayKey) {
+   function assignTeacherToDate(name, dayKey) {
+      // 1. 取得該日期的名單，確保不會讀取失敗
       const list = state.calendar[dayKey] || [];
+      
       if (list.length >= 2) {
         showToast(`8/${dayKey.split('-')[1]} 備課日登記已滿 (每日上限2人)！`, 'warning');
         return false;
@@ -563,13 +565,23 @@
         showToast(`【${name}】已登記過其他備課日！每位教師限登記 1 天。`, 'warning');
         return false;
       }
+      
+      // 🌟 關鍵修復：對抗 Firebase 自動刪除空陣列的特性
+      if (!state.calendar[dayKey]) {
+        state.calendar[dayKey] = [];
+      }
+      
+      // 寫入名單並上傳雲端
       state.calendar[dayKey].push(name);
       saveToCloud(); 
       showToast("成功填入【" + name + "】於 8/" + dayKey.split('-')[1] + " 備課日", "success");
       return true;
     }
 
-    function removeAssignment(dayKey, index) {
+function removeAssignment(dayKey, index) {
+      // 防呆：如果雲端剛好沒有這個日期的資料，直接中斷
+      if (!state.calendar[dayKey]) return; 
+
       const removedName = state.calendar[dayKey][index];
       state.calendar[dayKey].splice(index, 1);
       saveToCloud(); 
